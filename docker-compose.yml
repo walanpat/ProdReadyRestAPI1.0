@@ -1,0 +1,41 @@
+version: "3.9"
+services:
+  db:
+    image: postgres:alpine
+    container_name: "comments-database"
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_DB=${DB_TABLE:?err}
+      - POSTGRES_USER=${DB_USERNAME:?err}
+      - POSTGRES_PASSWORD=${DB_PASSWORD:?err}
+    networks:
+      - fullstack
+    volumes:
+      - database_postgres:/var/lib/postgresql/data
+    restart: always
+
+  api:
+    build: .
+    container_name: "comments-rest-api"
+    environment:
+      - DB_USERNAME=${DB_USERNAME:?err}
+      - DB_PASSWORD=${DB_PASSWORD:?err}
+      - DB_DB=${DB_TABLE:?err}
+      - DB_HOST=db
+      - DB_TABLE=${DB_TABLE:?err}
+      - DB_PORT=5432
+    ports:
+      - "8080:8080"
+    depends_on:
+      - db
+    networks:
+      - fullstack
+    restart: always
+
+volumes:
+  database_postgres:
+
+networks:
+  fullstack:
+    driver: bridge
