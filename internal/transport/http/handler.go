@@ -3,8 +3,8 @@ package http
 import (
 	"ProdReadyRestAPI1.0/internal/comment"
 	"encoding/json"
-	"fmt"
 	"github.com/gorilla/mux"
+	log "github.com/sirupsen/logrus"
 	"net/http"
 	"strconv"
 )
@@ -28,10 +28,23 @@ func NewHandler(service *comment.Service) *Handler {
 	}
 }
 
+//LoggingMiddleware - adds middleware around endpoints
+func LoggingMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		log.WithFields(
+			log.Fields{
+				"Method": r.Method,
+				"Path":   r.URL.Path,
+			}).Info("Handled Request")
+		next.ServeHTTP(w, r)
+	})
+}
+
 //SetupRoutes - Sets up all the routes for our application
 func (h *Handler) SetupRoutes() {
-	fmt.Println("Setting up Routes")
+	log.Info("Setting up Routes")
 	h.Router = mux.NewRouter()
+	h.Router.Use(LoggingMiddleware)
 
 	h.Router.HandleFunc("/api/comment", h.GetAllComments).Methods("GET")
 	h.Router.HandleFunc("/api/comment", h.PostComment).Methods("POST")
