@@ -30,5 +30,5 @@ func NewDatabase() (*gorm.DB, error) {
 
 		return db, err
 	}
-	return nil, nil
+	return db, nil
 }

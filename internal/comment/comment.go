@@ -1,6 +1,9 @@
 package comment
 
-import "github.com/jinzhu/gorm"
+import (
+	"fmt"
+	"github.com/jinzhu/gorm"
+)
 
 //Service - The struct for our comment services
 type Service struct {
@@ -62,6 +65,7 @@ func (s *Service) PostComment(comment Comment) (Comment, error) {
 func (s *Service) UpdateComment(ID uint, newComment Comment) (Comment, error) {
 	comment, err := s.GetComment(ID)
 	if err != nil {
+		fmt.Println("Error at update comment")
 		return Comment{}, err
 	}
 	if result := s.DB.Model(&comment).Updates(newComment); result.Error != nil {

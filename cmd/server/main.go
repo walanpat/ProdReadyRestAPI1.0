@@ -1,6 +1,7 @@
 package main
 
 import (
+	"ProdReadyRestAPI1.0/internal/comment"
 	"ProdReadyRestAPI1.0/internal/database"
 	transportHTTP "ProdReadyRestAPI1.0/internal/transport/http"
 	"fmt"
@@ -18,13 +19,19 @@ func (app *App) Run() error {
 	fmt.Println("Setting up our App")
 
 	var err error
-	_, err = database.NewDatabase()
+	db, err := database.NewDatabase()
 	if err != nil {
 		fmt.Println("Error at NewDatabase")
 		return err
 	}
+	err = database.MigrateDB(db)
+	if err != nil {
+		return err
+	}
 
-	handler := transportHTTP.NewHandler()
+	commentService := comment.NewService(db)
+
+	handler := transportHTTP.NewHandler(commentService)
 	handler.SetupRoutes()
 	if err := http.ListenAndServe(":8080", handler.Router); err != nil {
 		fmt.Println("Failed to set up server")
@@ -40,6 +47,7 @@ func main() {
 	}
 }
 
+//init - Reads our .env file, which has our database credentials
 func init() {
 	err := godotenv.Load()
 	if err != nil {
