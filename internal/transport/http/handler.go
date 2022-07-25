@@ -3,10 +3,14 @@ package http
 import (
 	"ProdReadyRestAPI1.0/internal/comment"
 	"encoding/json"
+	"errors"
+	"fmt"
+	jwt "github.com/dgrijalva/jwt-go"
 	"github.com/gorilla/mux"
 	log "github.com/sirupsen/logrus"
 	"net/http"
 	"strconv"
+	"strings"
 )
 
 //Handler - stores pointer to our comments service
@@ -40,18 +44,69 @@ func LoggingMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+// BasicAuth - a middlware function that will provide basic auth around specific endpoints
+func BasicAuth(original func(w http.ResponseWriter, r *http.Request)) func(w http.ResponseWriter, r *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		log.Info("Basic Auth endpoint Hit")
+		user, pass, ok := r.BasicAuth()
+		if user == "admin" && pass == "password" && ok {
+			original(w, r)
+		} else {
+			sendErrorResponse(w, "not authorized", errors.New("not authorized"))
+		}
+	}
+}
+
+func validateToken(accessToken string) bool {
+	var mySigningKey = []byte("missionimpossible")
+	token, err := jwt.Parse(accessToken, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("there has been an error")
+		}
+		return mySigningKey, nil
+	})
+	if err != nil {
+		return false
+	}
+	return token.Valid
+}
+
+//JWTAuth - A decorator function for JWT validation for endpoints
+func JWTAuth(original func(w http.ResponseWriter, r *http.Request)) func(w http.ResponseWriter, r *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		log.Info("jwt Auth hit")
+		authHeader := r.Header["Authorization"]
+		if authHeader == nil {
+			sendErrorResponse(w, "not authorized", errors.New("not authorized"))
+			return
+		}
+		//Bearer jwt-token
+		authHeaderParts := strings.Split(authHeader[0], " ")
+		if len(authHeaderParts) != 2 || strings.ToLower(authHeaderParts[0]) != "bearer" {
+			sendErrorResponse(w, "not authorized", errors.New("not authorized"))
+			return
+		}
+		if validateToken(authHeaderParts[1]) {
+			original(w, r)
+		} else {
+			sendErrorResponse(w, "not authorized", errors.New("not authorized"))
+			return
+		}
+	}
+}
+
 //SetupRoutes - Sets up all the routes for our application
 func (h *Handler) SetupRoutes() {
 	log.Info("Setting up Routes")
 	h.Router = mux.NewRouter()
 	h.Router.Use(LoggingMiddleware)
 
-	h.Router.HandleFunc("/api/comment", h.GetAllComments).Methods("GET")
-	h.Router.HandleFunc("/api/comment", h.PostComment).Methods("POST")
+	h.Router.HandleFunc("/api/comment", JWTAuth(h.GetAllComments)).Methods("GET")
+	h.Router.HandleFunc("/api/comment", JWTAuth(h.PostComment)).Methods("POST")
 
-	h.Router.HandleFunc("/api/comment/{id}", h.GetComment).Methods("GET")
-	h.Router.HandleFunc("/api/comment/{id}", h.DeleteComment).Methods("DELETE")
-	h.Router.HandleFunc("/api/comment/{id}", h.UpdateComment).Methods("PUT")
+	h.Router.HandleFunc("/api/comment/{id}", JWTAuth(h.GetComment)).Methods("GET")
+	h.Router.HandleFunc("/api/comment/{id}", JWTAuth(h.DeleteComment)).Methods("DELETE")
+	h.Router.HandleFunc("/api/comment/{id}", JWTAuth(h.UpdateComment)).Methods("PUT")
 
 	h.Router.HandleFunc("/api/health", func(w http.ResponseWriter, r *http.Request) {
 		if err := sendOkResponse(w, Response{Message: "Successful Health Check"}); err != nil {
@@ -190,7 +245,9 @@ func sendOkResponse(w http.ResponseWriter, resp interface{}) error {
 
 func sendErrorResponse(w http.ResponseWriter, message string, err error) {
 	w.WriteHeader(http.StatusInternalServerError)
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+
 	if err := json.NewEncoder(w).Encode(Response{Message: message, Error: err.Error()}); err != nil {
-		panic(err)
+		log.Error(err)
 	}
 }
